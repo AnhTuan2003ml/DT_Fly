@@ -50,7 +50,7 @@ def main():
 
     # Tạo vùng đa giác với độ phân giải của webcam
     zone_polygon = (ZONE_POLYGON * np.array(args.webcam_resolution)).astype(int)
-    zone = sv.PolygonZone(polygon=zone_polygon)
+    zone = sv.PolygonZone(polygon=zone_polygon, frame_resolution_wh=(frame_width, frame_height))
 
     # Vòng lặp chính để xử lý khung hình từ webcam
     while True:
@@ -63,16 +63,22 @@ def main():
         detections = sv.Detections.from_yolov8(result)
 
         # Kiểm tra và hiển thị thông tin trên màn hình LCD
+        lcd_screen.clear()  # Xóa màn hình LCD trước khi hiển thị thông tin mới
+        detected_objects = []
+
         if len(detections) == 0:
             lcd_screen.display("No Detection")
         else:
             # Duyệt qua các đối tượng phát hiện được
             for _, confidence, class_id, _ in detections:
-                object_name = model.model.names[class_id]
-                # Hiển thị tên đối tượng trên màn hình LCD
-                lcd_screen.display(object_name)
-                print(f"Detected: {object_name}")  # In ra console
-                break  # Thoát sau khi phát hiện đối tượng đầu tiên
+                if class_id in model.model.names:  # Kiểm tra xem class_id có hợp lệ không
+                    object_name = model.model.names[class_id]
+                    detected_objects.append(object_name)
+                    print(f"Detected: {object_name}")  # In ra console
+
+            # Hiển thị tất cả các đối tượng phát hiện trên màn hình LCD
+            if detected_objects:
+                lcd_screen.display(", ".join(detected_objects))
 
         # Tạo nhãn cho các đối tượng phát hiện được
         labels = [
@@ -93,8 +99,9 @@ def main():
         if (cv2.waitKey(30) == 27):
             break
 
-    # Giải phóng webcam
+    # Giải phóng webcam và đóng cửa sổ
     cap.release()
+    cv2.destroyAllWindows()
 
 # Khởi động chương trình khi được chạy
 if __name__ == "__main__":
