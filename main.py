@@ -6,7 +6,6 @@ import supervision as sv  # Thư viện để chú thích và giám sát các đ
 import numpy as np  # Thư viện để xử lý các mảng số học
 import LiquidCrystal_I2C 
 lcd_screen = LiquidCrystal_I2C.lcd()  # Sử dụng lớp lcd đã tạo trước
-import time  # Thư viện để xử lý thời gian
 
 # Định nghĩa vùng đa giác mà sẽ được sử dụng để xác định khu vực quan tâm trong khung hình
 ZONE_POLYGON = np.array([
@@ -54,8 +53,8 @@ def main():
 
     # Tạo vùng đa giác với độ phân giải của webcam
     zone_polygon = (ZONE_POLYGON * np.array(args.webcam_resolution)).astype(int)
-    # Thiết lập vùng đa giác
-    zone = sv.PolygonZone(polygon=zone_polygon, frame_resolution_wh=tuple(args.webcam_resolution))
+    # Thiết lập vùng đa giác (bỏ qua frame_resolution_wh)
+    zone = sv.PolygonZone(polygon=zone_polygon)
     # Thiết lập công cụ chú thích vùng đa giác
     zone_annotator = sv.PolygonZoneAnnotator(
         zone=zone, 
@@ -107,9 +106,9 @@ def main():
         if (cv2.waitKey(30) == 27):
             break
 
-    # Giải phóng webcam và đóng tất cả các cửa sổ
+    # Giải phóng webcam
     cap.release()
-    cv2.destroyAllWindows()
+    # Không gọi cv2.destroyAllWindows() nếu không cần thiết
 
 # Khởi động chương trình khi được chạy
 if __name__ == "__main__":
