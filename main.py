@@ -1,13 +1,12 @@
-import cv2  # Thư viện OpenCV để xử lý ảnh và video
-import argparse  # Thư viện để phân tích các tham số dòng lệnh
-
-from ultralytics import YOLO  # Thư viện từ Ultralytics để sử dụng mô hình YOLOv8
-import supervision as sv  # Thư viện để chú thích và giám sát các đối tượng
-import numpy as np  # Thư viện để xử lý các mảng số học
-import LiquidCrystal_I2C  # Thư viện để điều khiển màn hình LCD
+import cv2
+import argparse
+from ultralytics import YOLO
+import supervision as sv
+import numpy as np
+import LiquidCrystal_I2C
 
 # Khởi tạo màn hình LCD
-lcd_screen = LiquidCrystal_I2C.lcd()  # Sử dụng lớp lcd đã tạo trước
+lcd_screen = LiquidCrystal_I2C.lcd()
 
 # Định nghĩa vùng đa giác để xác định khu vực quan tâm
 ZONE_POLYGON = np.array([
@@ -25,7 +24,7 @@ def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="YOLOv8 live")
     parser.add_argument(
         "--webcam-resolution",
-        default=[640, 480],  # Giảm độ phân giải xuống 640x480
+        default=[320, 240],  # Đặt độ phân giải thấp hơn để tăng hiệu suất
         nargs=2,
         type=int
     )
@@ -45,9 +44,6 @@ def main():
     # Tải mô hình YOLO từ file best.pt
     model = YOLO("best.pt")
 
-    # Thiết lập công cụ chú thích hộp bao quanh đối tượng
-    box_annotator = sv.BoxAnnotator(thickness=2)
-
     # Tạo vùng đa giác với độ phân giải của webcam
     zone_polygon = (ZONE_POLYGON * np.array(args.webcam_resolution)).astype(int)
     zone = sv.PolygonZone(polygon=zone_polygon, frame_resolution_wh=(frame_width, frame_height))
@@ -63,46 +59,25 @@ def main():
         detections = sv.Detections.from_yolov8(result)
 
         # Kiểm tra và hiển thị thông tin trên màn hình LCD
-        lcd_screen.clear()  # Xóa màn hình LCD trước khi hiển thị thông tin mới
-        detected_objects = []
-
         if len(detections) == 0:
-            lcd_screen.display("No Detection")
+            lcd_screen.display("No Detection", 0, 0)  # Dòng 0, vị trí 0
         else:
-            # Duyệt qua các đối tượng phát hiện được
             for _, confidence, class_id, _ in detections:
-                if class_id in model.model.names:  # Kiểm tra xem class_id có hợp lệ không
-                    object_name = model.model.names[class_id]
-                    detected_objects.append(object_name)
-                    print(f"Detected: {object_name}")  # In ra console
+                object_name = model.model.names[class_id]
+                lcd_screen.display(object_name, 0, 0)  # Hiển thị trên dòng 0
+                print(f"Detected: {object_name}")
+                break  # Thoát sau khi phát hiện đối tượng đầu tiên
 
-            # Hiển thị tất cả các đối tượng phát hiện trên màn hình LCD
-            if detected_objects:
-                lcd_screen.display(", ".join(detected_objects))
-
-        # Tạo nhãn cho các đối tượng phát hiện được
-        labels = [
-            f"{model.model.names[class_id]} {confidence:0.2f}"
-            for _, confidence, class_id, _ in detections
-        ]
-        # Chú thích khung hình với các hộp bao quanh và nhãn
-        frame = box_annotator.annotate(
-            scene=frame,
-            detections=detections,
-            labels=labels
-        )
-
-        # Hiển thị khung hình đã chú thích
+        # Hiển thị khung hình trực tiếp
         cv2.imshow("yolov8", frame)
 
         # Thoát vòng lặp nếu nhấn phím ESC
-        if (cv2.waitKey(30) == 27):
+        if cv2.waitKey(1) == 27:
             break
 
-    # Giải phóng webcam và đóng cửa sổ
+    # Giải phóng webcam
     cap.release()
     cv2.destroyAllWindows()
 
-# Khởi động chương trình khi được chạy
 if __name__ == "__main__":
     main()
