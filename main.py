@@ -1,14 +1,14 @@
 import cv2
-import argparse
-from ultralytics import YOLO
-import supervision as sv
+import threading
 import numpy as np
+from ultralytics import YOLO
 import LiquidCrystal_I2C
+import time
 
 # Khởi tạo màn hình LCD
 lcd_screen = LiquidCrystal_I2C.lcd()
 
-# Định nghĩa vùng đa giác để xác định khu vực quan tâm
+# Giảm độ phân giải
 ZONE_POLYGON = np.array([
     [0, 0],
     [0.5, 0],
@@ -16,66 +16,49 @@ ZONE_POLYGON = np.array([
     [0, 1]
 ])
 
-# Xóa màn hình LCD
-lcd_screen.clear()
+# Khởi tạo mô hình YOLOv8n (nano)
+model = YOLO("yolov8n.pt")
 
-# Hàm để phân tích các tham số dòng lệnh
-def parse_arguments() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="YOLOv8 live")
-    parser.add_argument(
-        "--webcam-resolution",
-        default=[320, 240],  # Đặt độ phân giải thấp hơn để tăng hiệu suất
-        nargs=2,
-        type=int
-    )
-    args = parser.parse_args()
-    return args
+# Cập nhật màn hình LCD
+def update_lcd(detections):
+    if len(detections) == 0:
+        lcd_screen.display("No Detection", 0, 0)
+    else:
+        object_name = model.model.names[detections[0][-2]]
+        lcd_screen.display(object_name, 0, 0)
+        print(f"Detected: {object_name}")
 
-# Hàm chính thực hiện quá trình phát hiện đối tượng
+# Xử lý webcam trong luồng riêng
+def process_frame(frame, frame_width, frame_height):
+    result = model(frame, agnostic_nms=True)[0]
+    detections = sv.Detections.from_yolov8(result)
+    update_lcd(detections)
+
+# Hàm chính
 def main():
-    args = parse_arguments()
-    frame_width, frame_height = args.webcam_resolution
-
-    # Thiết lập kết nối với webcam
+    frame_width, frame_height = 640, 480
     cap = cv2.VideoCapture(0)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, frame_width)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, frame_height)
 
-    # Tải mô hình YOLO từ file best.pt
-    model = YOLO("best.pt")
-
-    # Tạo vùng đa giác với độ phân giải của webcam
-    zone_polygon = (ZONE_POLYGON * np.array(args.webcam_resolution)).astype(int)
-    zone = sv.PolygonZone(polygon=zone_polygon, frame_resolution_wh=(frame_width, frame_height))
-
-    # Vòng lặp chính để xử lý khung hình từ webcam
     while True:
         ret, frame = cap.read()
         if not ret:
-            break  # Nếu không đọc được khung hình, thoát khỏi vòng lặp
-
-        # Sử dụng mô hình YOLO để phát hiện đối tượng trong khung hình
-        result = model(frame, agnostic_nms=True)[0]
-        detections = sv.Detections.from_yolov8(result)
-
-        # Kiểm tra và hiển thị thông tin trên màn hình LCD
-        if len(detections) == 0:
-            lcd_screen.display("No Detection", 0, 0)  # Dòng 0, vị trí 0
-        else:
-            for _, confidence, class_id, _ in detections:
-                object_name = model.model.names[class_id]
-                lcd_screen.display(object_name, 0, 0)  # Hiển thị trên dòng 0
-                print(f"Detected: {object_name}")
-                break  # Thoát sau khi phát hiện đối tượng đầu tiên
-
-        # Hiển thị khung hình trực tiếp
-        cv2.imshow("yolov8", frame)
-
-        # Thoát vòng lặp nếu nhấn phím ESC
-        if cv2.waitKey(1) == 27:
             break
 
-    # Giải phóng webcam
+        # Resize để giảm tải cho xử lý
+        frame_resized = cv2.resize(frame, (320, 240))
+
+        # Khởi tạo luồng xử lý mô hình YOLO
+        threading.Thread(target=process_frame, args=(frame_resized, 320, 240)).start()
+
+        # Hiển thị khung hình lên cửa sổ
+        cv2.imshow("YOLOv8", frame_resized)
+
+        # Thoát vòng lặp nếu nhấn phím ESC
+        if cv2.waitKey(30) == 27:
+            break
+
     cap.release()
     cv2.destroyAllWindows()
 
